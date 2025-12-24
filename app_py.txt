@@ -1,0 +1,150 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(
+    page_title="Rastreador de Royalties - Amazônia",
+    page_icon="🛢️",
+    layout="wide"
+)
+
+# --- 1. DADOS SIMULADOS (MOCK DATA) ---
+# Na versão final, substituiremos isso por: df = pd.read_excel("seus_dados.xlsx")
+data = {
+    'municipio': ['Coari', 'Município A (Liminar)', 'Tefé', 'Município B (Liminar)', 'Codajás'],
+    'ranking': [1, 2, 3, 4, 5],
+    'grupo': ['ANP', 'Liminar', 'ANP', 'Liminar', 'ANP'],
+    'arrecadacao_total': [150000000.00, 85000000.00, 60000000.00, 45000000.00, 30000000.00],
+    'tem_portal': ['Sim', 'Não', 'Sim', 'Parcial', 'Sim'],
+    'maior_beneficiario_tipo': ['Obras/Engenharia', 'Escritório de Advocacia', 'Saúde', 'Escritório de Advocacia', 'Obras'],
+    'pagou_inss_irregular': ['Não', 'Sim', 'Não', 'Sim', 'Não'],
+    'perc_educacao': [70, 5, 76, 0, 75],  # Meta é 75%
+    'perc_saude': [20, 5, 25, 0, 26],     # Meta é 25%
+    'analise_texto': [
+        "Apresenta alta conformidade. Maior gasto em infraestrutura.",
+        "Alto volume para escritório jurídico. Indícios de uso para folha de pagamento.",
+        "Segue a lei de partilha. Transparência ativa funcional.",
+        "Portal fora do ar. Receita usada quase integralmente para custeio da máquina.",
+        "Bons indicadores de aplicação na educação básica."
+    ]
+}
+
+df = pd.DataFrame(data)
+
+# --- FUNÇÕES DE VISUALIZAÇÃO ---
+
+def plot_compliance(educacao, saude):
+    """Gera o gráfico de rosca para conformidade legal"""
+    outros = 100 - (educacao + saude)
+    if outros < 0: outros = 0 # Ajuste simples para erro de dados
+    
+    labels = ['Educação (Meta 75%)', 'Saúde (Meta 25%)', 'Outros/Irregular']
+    values = [educacao, saude, outros]
+    colors = ['#2ecc71', '#3498db', '#e74c3c'] # Verde, Azul, Vermelho
+    
+    fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.6, marker=dict(colors=colors))])
+    fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), height=250)
+    return fig
+
+# --- INTERFACE PRINCIPAL ---
+
+st.title("🛢️ Rastreador de Royalties: Amazônia")
+st.markdown("""
+**Monitoramento do Top Arrecadadores (2021-2025)** Esta ferramenta analisa a destinação dos recursos de royalties de petróleo e gás, destacando a diferença entre municípios produtores (ANP) e beneficiários de liminares.
+""")
+
+st.divider()
+
+# --- SIDEBAR DE NAVEGAÇÃO ---
+st.sidebar.header("Navegação")
+view_option = st.sidebar.radio("Escolha a visualização:", ["🏆 Ranking Geral", "🔍 Raio-X por Município"])
+
+# --- VISÃO 1: RANKING GERAL ---
+if view_option == "🏆 Ranking Geral":
+    st.header("Top Arrecadadores no Amazonas")
+    
+    # Métricas gerais
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Municípios Monitorados", len(df))
+    col1.info("Foco no Top 5 (Simulação)")
+    
+    total_arrecadado = df['arrecadacao_total'].sum()
+    col2.metric("Volume Total Rastreado", f"R$ {total_arrecadado:,.2f}")
+    
+    liminares = df[df['grupo'] == 'Liminar'].shape[0]
+    col3.metric("Municípios via Liminar", liminares, delta_color="inverse")
+
+    st.markdown("### Comparativo de Receita")
+    
+    # Gráfico de Barras do Ranking
+    fig_bar = px.bar(
+        df, 
+        x='municipio', 
+        y='arrecadacao_total',
+        color='grupo',
+        title='Arrecadação Total por Município e Tipo de Recebimento',
+        labels={'arrecadacao_total': 'Total Recebido (R$)', 'municipio': 'Município', 'grupo': 'Origem'},
+        color_discrete_map={'ANP': '#2ecc71', 'Liminar': '#e74c3c'}
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+    
+    st.dataframe(
+        df[['ranking', 'municipio', 'grupo', 'arrecadacao_total', 'tem_portal']],
+        hide_index=True,
+        use_container_width=True
+    )
+
+# --- VISÃO 2: RAIO-X DETALHADO ---
+else:
+    st.sidebar.markdown("---")
+    cidade_selecionada = st.sidebar.selectbox("Selecione o Município:", df['municipio'])
+    
+    # Filtrar dados da cidade
+    cidade_data = df[df['municipio'] == cidade_selecionada].iloc[0]
+    
+    # Cabeçalho da Cidade
+    st.header(f"Raio-X: {cidade_selecionada}")
+    
+    # Badges de Status
+    c1, c2, c3 = st.columns(3)
+    if cidade_data['grupo'] == 'Liminar':
+        c1.error(f"📌 Grupo: {cidade_data['grupo']}")
+    else:
+        c1.success(f"📌 Grupo: {cidade_data['grupo']}")
+        
+    c2.metric("Ranking de Arrecadação", f"#{cidade_data['ranking']}")
+    c3.metric("Receita Total", f"R$ {cidade_data['arrecadacao_total']:,.2f}")
+
+    st.markdown("---")
+
+    # Colunas de Análise
+    col_esquerda, col_direita = st.columns([1, 1])
+
+    with col_esquerda:
+        st.subheader("⚠️ Conformidade Legal (Lei 12.858/2013)")
+        st.caption("Meta: 75% Educação | 25% Saúde")
+        
+        # Gráfico de Donut
+        fig_donut = plot_compliance(cidade_data['perc_educacao'], cidade_data['perc_saude'])
+        st.plotly_chart(fig_donut, use_container_width=True)
+        
+        # Alerta de INSS
+        if cidade_data['pagou_inss_irregular'] == 'Sim':
+            st.error("""
+            **🚨 ALERTA DE DESVIO:** Identificado pagamento de encargos previdenciários (INSS) com fonte de Royalties. 
+            Isso pode configurar desvio de finalidade.
+            """)
+        else:
+            st.success("✅ Sem pagamentos irregulares de INSS detectados nesta amostra.")
+
+    with col_direita:
+        st.subheader("🔎 Destinação e Transparência")
+        
+        st.markdown(f"**Portal da Transparência:** {cidade_data['tem_portal']}")
+        
+        st.info(f"**Maior Beneficiário dos Recursos:** \n\n {cidade_data['maior_beneficiario_tipo']}")
+        
+        st.markdown("### Análise Jornalística")
+        st.write(f"> {cidade_data['analise_texto']}")
